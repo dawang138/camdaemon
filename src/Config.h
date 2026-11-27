@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 
 /// 运行配置：默认值 + 环境变量覆盖（部署时也可经 LaunchDaemon plist 传入）。
 @interface Config : NSObject

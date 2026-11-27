@@ -6,7 +6,7 @@
     <string>com.local.camdaemon</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/var/jb/usr/bin/camdaemon</string>
+        <string>/var/jb/Applications/CamDaemon.app/CamDaemon</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

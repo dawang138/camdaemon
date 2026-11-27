@@ -3,9 +3,10 @@
 @implementation Frame
 @end
 
-@interface FrameStore ()
-@property (nonatomic, strong) Frame *frame;
-@property (nonatomic, strong) dispatch_queue_t queue;
+@interface FrameStore () {
+    Frame *_frame;
+    dispatch_queue_t _queue;
+}
 @end
 
 @implementation FrameStore
@@ -19,12 +20,16 @@
 }
 
 - (void)setFrame:(Frame *)frame {
-    dispatch_async(_queue, ^{ self.frame = frame; });
+    dispatch_sync(_queue, ^{
+        _frame = frame;
+    });
 }
 
 - (Frame *)latestFrame {
     __block Frame *f = nil;
-    dispatch_sync(_queue, ^{ f = self.frame; });
+    dispatch_sync(_queue, ^{
+        f = _frame;
+    });
     return f;
 }
 

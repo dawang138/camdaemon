@@ -22,7 +22,7 @@
     if (self) {
         _config = config;
         _store = store;
-        _ciContext = [CIContext contextWithOptions:@{kCIContextUseSoftwareRenderer: @NO}];
+        _ciContext = [CIContext contextWithOptions:@{kCIContextUseSoftwareRenderer: @YES}];
     }
     return self;
 }

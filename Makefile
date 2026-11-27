@@ -18,6 +18,6 @@ camdaemon_FILES := \
 	src/HttpServer.m
 
 camdaemon_CFLAGS := -fobjc-arc -std=c11 -Wall -Wno-deprecated-declarations
-camdaemon_FRAMEWORKS := Foundation AVFoundation CoreGraphics CoreImage CoreMedia CoreVideo UIKit
+camdaemon_FRAMEWORKS := Foundation AVFoundation CoreGraphics CoreMedia CoreVideo UIKit
 
 include $(THEOS)/makefiles/tool.mk

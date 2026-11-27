@@ -23,6 +23,8 @@ jobs:
           unzip -q /tmp/sdks.zip -d /tmp/sdks
           sudo cp -R /tmp/sdks/sdks-master/*.sdk /opt/theos/sdks/ || true
           ls /opt/theos/sdks
+          brew install ldid
+          which ldid
 
       - name: Build rootless package
         run: |

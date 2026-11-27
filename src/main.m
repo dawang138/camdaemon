@@ -7,6 +7,13 @@
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
+        // 诊断：确认进程被系统/TCC 识别到的 bundle 身份与可执行路径。
+        NSBundle *mainBundle = [NSBundle mainBundle];
+        NSLog(@"[camdaemon] mainBundle.bundlePath = %@", mainBundle.bundlePath);
+        NSLog(@"[camdaemon] mainBundle.bundleIdentifier = %@", mainBundle.bundleIdentifier);
+        NSLog(@"[camdaemon] mainBundle.executablePath = %@", mainBundle.executablePath);
+        NSLog(@"[camdaemon] processInfo.arguments = %@", [NSProcessInfo processInfo].arguments);
+
         Config *config = [Config defaultConfig];
         FrameStore *store = [[FrameStore alloc] init];
         CameraCapture *capture = [[CameraCapture alloc] initWithConfig:config store:store];

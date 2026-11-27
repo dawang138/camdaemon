@@ -1,0 +1,10 @@
+name: ci-test
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ubuntu runner ok" && uname -a

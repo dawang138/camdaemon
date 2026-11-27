@@ -1,0 +1,39 @@
+name: build-camdaemon
+
+# 在 macOS runner 上编译 rootless 安装包；本机 Win 不参与编译。
+# 触发：推送到 main，或在 Actions 页面手动触发。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    env:
+      THEOS: /opt/theos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install THEOS + iOS SDK
+        run: |
+          sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
+          sudo mkdir -p /opt/theos/sdks
+          curl -L -o /tmp/sdks.zip https://github.com/theos/sdks/archive/refs/heads/master.zip
+          unzip -q /tmp/sdks.zip -d /tmp/sdks
+          sudo cp -R /tmp/sdks/sdks-master/*.sdk /opt/theos/sdks/ || true
+          ls /opt/theos/sdks
+
+      - name: Build rootless package
+        run: |
+          make package \
+            THEOS_PACKAGE_SCHEME=rootless \
+            ARCHS=arm64 \
+            FINALPACKAGE=1
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: camdaemon-deb
+          path: ${{ env.THEOS }}/packages/*.deb
+          retention-days: 14

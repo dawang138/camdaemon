@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.local.camdaemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/var/jb/usr/bin/camdaemon</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/var/jb/var/log/camdaemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/jb/var/log/camdaemon.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>CAM_PORT</key>
+        <string>8090</string>
+        <key>CAM_PRESET</key>
+        <string>AVCaptureSessionPreset1280x720</string>
+    </dict>
+</dict>
+</plist>

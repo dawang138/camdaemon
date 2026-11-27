@@ -1,8 +1,8 @@
 Package: com.local.camdaemon
-Name: CamDaemon
-Version: 0.2.0
+Name: CamDaemonSB
+Version: 0.3.0
 Architecture: iphoneos-arm64
-Description: LAN camera daemon - iPhone 12 stage 2 (.app bundle; capture + embedded HTTP)
+Description: LAN camera tweak - injects into SpringBoard for background capture + embedded HTTP
 Maintainer: local
-Section: Daemons
-Depends: 
+Section: Tweaks
+Depends: ellekit

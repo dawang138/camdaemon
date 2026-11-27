@@ -12,6 +12,7 @@
 @property (nonatomic, strong) AVCaptureSession *session;
 @property (nonatomic, strong) dispatch_queue_t delegateQueue;
 @property (nonatomic, assign) BOOL running;
+@property (nonatomic, assign) BOOL firstFrameLogged;
 @end
 
 @implementation CameraCapture
@@ -21,8 +22,34 @@
     if (self) {
         _config = config;
         _store = store;
+        NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+        [nc addObserver:self selector:@selector(sessionStarted:)
+                       name:AVCaptureSessionDidStartRunningNotification object:nil];
+        [nc addObserver:self selector:@selector(sessionRuntimeError:)
+                       name:AVCaptureSessionRuntimeErrorNotification object:nil];
+        [nc addObserver:self selector:@selector(sessionInterrupted:)
+                       name:AVCaptureSessionWasInterruptedNotification object:nil];
+        [nc addObserver:self selector:@selector(sessionInterruptionEnded:)
+                       name:AVCaptureSessionInterruptionEndedNotification object:nil];
     }
     return self;
+}
+
+- (void)sessionStarted:(NSNotification *)note {
+    NSLog(@"[camdaemon] 会话通知: DidStartRunning, isRunning=%d", _session.isRunning);
+}
+
+- (void)sessionRuntimeError:(NSNotification *)note {
+    NSError *err = note.userInfo[AVCaptureSessionErrorKey];
+    NSLog(@"[camdaemon] 会话通知: RuntimeError %@", err ? err.localizedDescription : @"(nil)");
+}
+
+- (void)sessionInterrupted:(NSNotification *)note {
+    NSLog(@"[camdaemon] 会话通知: WasInterrupted, userInfo=%@", note.userInfo);
+}
+
+- (void)sessionInterruptionEnded:(NSNotification *)note {
+    NSLog(@"[camdaemon] 会话通知: InterruptionEnded");
 }
 
 - (BOOL)isRunning { return _running; }
@@ -54,6 +81,9 @@
             userInfo:@{NSLocalizedDescriptionKey: @"未找到后置摄像头设备"}];
         return NO;
     }
+    NSLog(@"[camdaemon] device: position=%ld uniqueID=%@ name=%@ activeFormat=%@",
+          (long)device.position, device.uniqueID, device.localizedName,
+          device.activeFormat.formatDescription != nil ? @"yes" : @"no");
 
     NSError *inputErr = nil;
     AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&inputErr];
@@ -69,10 +99,16 @@
     _delegateQueue = dispatch_queue_create("com.local.camdaemon.capture", DISPATCH_QUEUE_SERIAL);
     [output setSampleBufferDelegate:self queue:_delegateQueue];
 
-    if ([_session canAddInput:input]) [_session addInput:input];
-    if ([_session canAddOutput:output]) [_session addOutput:output];
+    BOOL canIn = [_session canAddInput:input];
+    BOOL canOut = [_session canAddOutput:output];
+    NSLog(@"[camdaemon] canAddInput=%d canAddOutput=%d", canIn, canOut);
+    if (canIn) [_session addInput:input];
+    if (canOut) [_session addOutput:output];
+    NSLog(@"[camdaemon] session inputs=%lu outputs=%lu",
+          (unsigned long)_session.inputs.count, (unsigned long)_session.outputs.count);
 
     [_session startRunning];
+    NSLog(@"[camdaemon] startRunning 后 isRunning=%d", _session.isRunning);
     _running = YES;
     return YES;
 }
@@ -90,6 +126,12 @@
 
     CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
     if (!pixelBuffer) return;
+
+    if (!_firstFrameLogged) {
+        _firstFrameLogged = YES;
+        NSLog(@"[camdaemon] 首帧到达: %zux%zu",
+              CVPixelBufferGetWidth(pixelBuffer), CVPixelBufferGetHeight(pixelBuffer));
+    }
 
     NSData *jpeg = [self encodeJpeg:pixelBuffer
                             quality:_config.snapshotJpegQuality

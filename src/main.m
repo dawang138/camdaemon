@@ -4,6 +4,7 @@
 #import "FrameStore.h"
 #import "CameraCapture.h"
 #import "HttpServer.h"
+#import "Logger.h"
 
 static Config       *g_config;
 static FrameStore   *g_store;
@@ -15,7 +16,7 @@ __attribute__((constructor))
 static void CamDaemonSBInit(void) {
     @autoreleasepool {
         NSBundle *mainBundle = [NSBundle mainBundle];
-        NSLog(@"[camdaemon] tweak loaded: bundlePath=%@ bundleID=%@",
+        SBDebug(@"[camdaemon] tweak loaded: bundlePath=%@ bundleID=%@",
               mainBundle.bundlePath, mainBundle.bundleIdentifier);
 
         g_config = [Config defaultConfig];
@@ -26,12 +27,12 @@ static void CamDaemonSBInit(void) {
 
         NSError *err = nil;
         if (![g_capture start:&err]) {
-            NSLog(@"[camdaemon] 采集启动失败: %@", err.localizedDescription);
+            SBDebug(@"[camdaemon] 采集启动失败: %@", err.localizedDescription);
         }
         if (![g_http start:&err]) {
-            NSLog(@"[camdaemon] HTTP 启动失败: %@", err.localizedDescription);
+            SBDebug(@"[camdaemon] HTTP 启动失败: %@", err.localizedDescription);
         }
 
-        NSLog(@"[camdaemon] 已启动，监听 %@:%d", g_config.listenHost, g_config.listenPort);
+        SBDebug(@"[camdaemon] 已启动，监听 %@:%d", g_config.listenHost, g_config.listenPort);
     }
 }

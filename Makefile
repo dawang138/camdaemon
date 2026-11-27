@@ -6,6 +6,9 @@ SDK := iPhoneOS16.5.sdk
 ARCHS := arm64
 THEOS_PACKAGE_SCHEME := rootless
 
+# ldid 签名时注入摄像头 entitlement（越狱设备 AMFI 放宽，可自签注入）。
+TARGET_CODESIGN_FLAGS := "-Sentitlements.plist"
+
 include $(THEOS)/makefiles/common.mk
 
 TOOL_NAME := camdaemon

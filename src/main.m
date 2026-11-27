@@ -5,33 +5,33 @@
 #import "CameraCapture.h"
 #import "HttpServer.h"
 
-int main(int argc, const char *argv[]) {
-    @autoreleasepool {
-        // 诊断：确认进程被系统/TCC 识别到的 bundle 身份与可执行路径。
-        NSBundle *mainBundle = [NSBundle mainBundle];
-        NSLog(@"[camdaemon] mainBundle.bundlePath = %@", mainBundle.bundlePath);
-        NSLog(@"[camdaemon] mainBundle.bundleIdentifier = %@", mainBundle.bundleIdentifier);
-        NSLog(@"[camdaemon] mainBundle.executablePath = %@", mainBundle.executablePath);
-        NSLog(@"[camdaemon] processInfo.arguments = %@", [NSProcessInfo processInfo].arguments);
+static Config       *g_config;
+static FrameStore   *g_store;
+static CameraCapture *g_capture;
+static HttpServer    *g_http;
 
-        Config *config = [Config defaultConfig];
-        FrameStore *store = [[FrameStore alloc] init];
-        CameraCapture *capture = [[CameraCapture alloc] initWithConfig:config store:store];
-        HttpServer *http = [[HttpServer alloc] initWithConfig:config store:store];
-        http.runningCheck = ^BOOL { return capture.isRunning; };
+// dylib 被 ElleKit 注入 SpringBoard 后由构造函数入口装配，无需 main/RunLoop。
+__attribute__((constructor))
+static void CamDaemonSBInit(void) {
+    @autoreleasepool {
+        NSBundle *mainBundle = [NSBundle mainBundle];
+        NSLog(@"[camdaemon] tweak loaded: bundlePath=%@ bundleID=%@",
+              mainBundle.bundlePath, mainBundle.bundleIdentifier);
+
+        g_config = [Config defaultConfig];
+        g_store = [[FrameStore alloc] init];
+        g_capture = [[CameraCapture alloc] initWithConfig:g_config store:g_store];
+        g_http = [[HttpServer alloc] initWithConfig:g_config store:g_store];
+        g_http.runningCheck = ^BOOL { return g_capture.isRunning; };
 
         NSError *err = nil;
-        if (![capture start:&err]) {
+        if (![g_capture start:&err]) {
             NSLog(@"[camdaemon] 采集启动失败: %@", err.localizedDescription);
         }
-        if (![http start:&err]) {
+        if (![g_http start:&err]) {
             NSLog(@"[camdaemon] HTTP 启动失败: %@", err.localizedDescription);
         }
 
-        NSLog(@"[camdaemon] 已启动，监听 %@:%d", config.listenHost, config.listenPort);
-
-        // 保活：阶段二前台常亮，阶段三再做 LaunchDaemon 守护策略。
-        [[NSRunLoop mainRunLoop] run];
-        return 0;
+        NSLog(@"[camdaemon] 已启动，监听 %@:%d", g_config.listenHost, g_config.listenPort);
     }
 }

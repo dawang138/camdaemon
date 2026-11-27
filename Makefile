@@ -2,13 +2,13 @@
 # 在 GitHub Actions macOS runner 上编译；本机 Win 不参与编译。
 # 路线 1：采集会话 + HTTP 服务跑在常驻系统进程 SpringBoard 内，绕开后台禁摄像头限制。
 
-TARGET := iphone:clang:16.3
+TARGET := iphone:clang:16.5
 SDK := iPhoneOS16.5.sdk
 ARCHS := arm64
 THEOS_PACKAGE_SCHEME := rootless
 
 # 部署目标对齐手机 iOS 16.3；minos 高于设备会被 dyld 拒绝加载。
-TARGET_IPHONEOS_DEPLOYMENT_VERSION := 16.3
+# （THEOS TARGET 第三段是 SDK 版本，部署目标只由下面 -mios-version-min 控制。）
 
 # ldid 签名注入摄像头 entitlement（越狱 AMFI 放宽，可自签注入）。
 TARGET_CODESIGN_FLAGS := "-Sentitlements.plist"

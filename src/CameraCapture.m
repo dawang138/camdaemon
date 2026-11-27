@@ -30,9 +30,18 @@
 - (BOOL)start:(NSError **)error {
     // 摄像头权限：daemon 无 GUI，首次授权需在带界面的 App 或系统设置里完成。
     AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
+    NSString *st;
+    switch (status) {
+        case AVAuthorizationStatusNotDetermined: st = @"NotDetermined"; break;
+        case AVAuthorizationStatusRestricted:    st = @"Restricted"; break;
+        case AVAuthorizationStatusDenied:        st = @"Denied"; break;
+        case AVAuthorizationStatusAuthorized:    st = @"Authorized"; break;
+        default: st = @"Unknown"; break;
+    }
+    NSLog(@"[camdaemon] 摄像头授权状态: %@ (%d)", st, (int)status);
     if (status == AVAuthorizationStatusDenied || status == AVAuthorizationStatusRestricted) {
         if (error) *error = [NSError errorWithDomain:@"CamDaemon" code:1
-            userInfo:@{NSLocalizedDescriptionKey: @"摄像头权限被拒绝，请在设置中允许"}];
+            userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"摄像头权限%@(%d)", st, (int)status]}];
         return NO;
     }
 

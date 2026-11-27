@@ -1,6 +1,7 @@
 #import "CameraCapture.h"
 #import "Config.h"
 #import "FrameStore.h"
+#import "Logger.h"
 
 #import <AVFoundation/AVFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
@@ -36,20 +37,20 @@
 }
 
 - (void)sessionStarted:(NSNotification *)note {
-    NSLog(@"[camdaemon] 会话通知: DidStartRunning, isRunning=%d", _session.isRunning);
+    SBDebug(@"[camdaemon] 会话通知: DidStartRunning, isRunning=%d", _session.isRunning);
 }
 
 - (void)sessionRuntimeError:(NSNotification *)note {
     NSError *err = note.userInfo[AVCaptureSessionErrorKey];
-    NSLog(@"[camdaemon] 会话通知: RuntimeError %@", err ? err.localizedDescription : @"(nil)");
+    SBDebug(@"[camdaemon] 会话通知: RuntimeError %@", err ? err.localizedDescription : @"(nil)");
 }
 
 - (void)sessionInterrupted:(NSNotification *)note {
-    NSLog(@"[camdaemon] 会话通知: WasInterrupted, userInfo=%@", note.userInfo);
+    SBDebug(@"[camdaemon] 会话通知: WasInterrupted, userInfo=%@", note.userInfo);
 }
 
 - (void)sessionInterruptionEnded:(NSNotification *)note {
-    NSLog(@"[camdaemon] 会话通知: InterruptionEnded");
+    SBDebug(@"[camdaemon] 会话通知: InterruptionEnded");
 }
 
 - (BOOL)isRunning { return _running; }
@@ -65,7 +66,7 @@
         case AVAuthorizationStatusAuthorized:    st = @"Authorized"; break;
         default: st = @"Unknown"; break;
     }
-    NSLog(@"[camdaemon] 摄像头授权状态: %@ (%d)", st, (int)status);
+    SBDebug(@"[camdaemon] 摄像头授权状态: %@ (%d)", st, (int)status);
     if (status == AVAuthorizationStatusDenied || status == AVAuthorizationStatusRestricted) {
         if (error) *error = [NSError errorWithDomain:@"CamDaemon" code:1
             userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"摄像头权限%@(%d)", st, (int)status]}];
@@ -81,7 +82,7 @@
             userInfo:@{NSLocalizedDescriptionKey: @"未找到后置摄像头设备"}];
         return NO;
     }
-    NSLog(@"[camdaemon] device: position=%ld uniqueID=%@ name=%@ activeFormat=%@",
+    SBDebug(@"[camdaemon] device: position=%ld uniqueID=%@ name=%@ activeFormat=%@",
           (long)device.position, device.uniqueID, device.localizedName,
           device.activeFormat.formatDescription != nil ? @"yes" : @"no");
 
@@ -101,14 +102,14 @@
 
     BOOL canIn = [_session canAddInput:input];
     BOOL canOut = [_session canAddOutput:output];
-    NSLog(@"[camdaemon] canAddInput=%d canAddOutput=%d", canIn, canOut);
+    SBDebug(@"[camdaemon] canAddInput=%d canAddOutput=%d", canIn, canOut);
     if (canIn) [_session addInput:input];
     if (canOut) [_session addOutput:output];
-    NSLog(@"[camdaemon] session inputs=%lu outputs=%lu",
+    SBDebug(@"[camdaemon] session inputs=%lu outputs=%lu",
           (unsigned long)_session.inputs.count, (unsigned long)_session.outputs.count);
 
     [_session startRunning];
-    NSLog(@"[camdaemon] startRunning 后 isRunning=%d", _session.isRunning);
+    SBDebug(@"[camdaemon] startRunning 后 isRunning=%d", _session.isRunning);
     _running = YES;
     return YES;
 }
@@ -129,7 +130,7 @@
 
     if (!_firstFrameLogged) {
         _firstFrameLogged = YES;
-        NSLog(@"[camdaemon] 首帧到达: %zux%zu",
+        SBDebug(@"[camdaemon] 首帧到达: %zux%zu",
               CVPixelBufferGetWidth(pixelBuffer), CVPixelBufferGetHeight(pixelBuffer));
     }
 

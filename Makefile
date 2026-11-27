@@ -23,5 +23,6 @@ CamDaemon_FILES := \
 
 CamDaemon_CFLAGS := -fobjc-arc -std=c11 -Wall -Wno-deprecated-declarations
 CamDaemon_FRAMEWORKS := Foundation AVFoundation CoreGraphics CoreMedia CoreVideo UIKit
+CamDaemon_RESOURCE_FILES := Info.plist
 
 include $(THEOS)/makefiles/application.mk

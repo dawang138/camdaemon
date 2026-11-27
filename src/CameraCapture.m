@@ -3,7 +3,7 @@
 #import "FrameStore.h"
 
 #import <AVFoundation/AVFoundation.h>
-#import <CoreImage/CoreImage.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <UIKit/UIKit.h>
 
 @interface CameraCapture () <AVCaptureVideoDataOutputSampleBufferDelegate>
@@ -11,7 +11,6 @@
 @property (nonatomic, strong) FrameStore *store;
 @property (nonatomic, strong) AVCaptureSession *session;
 @property (nonatomic, strong) dispatch_queue_t delegateQueue;
-@property (nonatomic, strong) CIContext *ciContext;
 @property (nonatomic, assign) BOOL running;
 @end
 
@@ -22,7 +21,6 @@
     if (self) {
         _config = config;
         _store = store;
-        _ciContext = [CIContext contextWithOptions:@{kCIContextUseSoftwareRenderer: @YES}];
     }
     return self;
 }
@@ -97,23 +95,75 @@
     [_store setFrame:frame];
 }
 
-#pragma mark - 编码辅助
+#pragma mark - 编码辅助（纯 CoreGraphics/CPU，不初始化 GL/EAGL/CoreImage）
 
 - (NSData *)encodeJpeg:(CVPixelBufferRef)pixelBuffer quality:(CGFloat)q maxWidth:(int)maxWidth {
-    CIImage *ciImage = [CIImage imageWithCVPixelBuffer:pixelBuffer];
-    CGFloat w = CVPixelBufferGetWidth(pixelBuffer);
+    CVPixelBufferLockBaseAddress(pixelBuffer, 0);
+    void *baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer);
+    size_t srcW = CVPixelBufferGetWidth(pixelBuffer);
+    size_t srcH = CVPixelBufferGetHeight(pixelBuffer);
+    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer);
 
-    if (maxWidth > 0 && w > maxWidth) {
-        CGFloat scale = maxWidth / w;
-        ciImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scale, scale)];
+    if (!baseAddress) {
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+        return nil;
     }
 
-    CGImageRef cgImage = [_ciContext createCGImage:ciImage fromRect:ciImage.extent];
-    if (!cgImage) return nil;
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGBitmapInfo bitmapInfo = kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little;
 
-    UIImage *image = [UIImage imageWithCGImage:cgImage];
+    CGContextRef srcContext = CGBitmapContextCreate(baseAddress, srcW, srcH, 8, bytesPerRow, colorSpace, bitmapInfo);
+    if (!srcContext) {
+        CGColorSpaceRelease(colorSpace);
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+        return nil;
+    }
+
+    CGImageRef sourceImage = CGBitmapContextCreateImage(srcContext);
+    CGContextRelease(srcContext);
+    if (!sourceImage) {
+        CGColorSpaceRelease(colorSpace);
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+        return nil;
+    }
+
+    size_t dstW = srcW;
+    size_t dstH = srcH;
+    if (maxWidth > 0 && srcW > (size_t)maxWidth) {
+        CGFloat scale = (CGFloat)maxWidth / (CGFloat)srcW;
+        dstW = (size_t)maxWidth;
+        dstH = (size_t)(srcH * scale);
+    }
+
+    CGImageRef outputImage = sourceImage;
+    CGContextRef dstContext = NULL;
+    if (dstW != srcW || dstH != srcH) {
+        dstContext = CGBitmapContextCreate(NULL, dstW, dstH, 8, 0, colorSpace, bitmapInfo);
+        if (dstContext) {
+            CGContextDrawImage(dstContext, CGRectMake(0, 0, dstW, dstH), sourceImage);
+            CGImageRef scaled = CGBitmapContextCreateImage(dstContext);
+            if (scaled) {
+                outputImage = scaled;
+            } else {
+                CGImageRelease(sourceImage);
+                sourceImage = NULL;
+                CGColorSpaceRelease(colorSpace);
+                CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+                return nil;
+            }
+        }
+    }
+
+    UIImage *image = [UIImage imageWithCGImage:outputImage];
     NSData *data = UIImageJPEGRepresentation(image, q);
-    CGImageRelease(cgImage);
+
+    if (dstContext) {
+        CGContextRelease(dstContext);
+        if (outputImage != sourceImage) CGImageRelease(outputImage);
+    }
+    if (sourceImage) CGImageRelease(sourceImage);
+    CGColorSpaceRelease(colorSpace);
+    CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
     return data;
 }
 

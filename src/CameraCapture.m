@@ -102,12 +102,10 @@
 - (NSData *)encodeJpeg:(CVPixelBufferRef)pixelBuffer quality:(CGFloat)q maxWidth:(int)maxWidth {
     CIImage *ciImage = [CIImage imageWithCVPixelBuffer:pixelBuffer];
     CGFloat w = CVPixelBufferGetWidth(pixelBuffer);
-    CGFloat h = CVPixelBufferGetHeight(pixelBuffer);
 
     if (maxWidth > 0 && w > maxWidth) {
         CGFloat scale = maxWidth / w;
-        ciImage = [ciImage transformedBy:CGAffineTransformMakeScale(scale, scale)];
-        w *= scale; h *= scale;
+        ciImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scale, scale)];
     }
 
     CGImageRef cgImage = [_ciContext createCGImage:ciImage fromRect:ciImage.extent];

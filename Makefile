@@ -25,7 +25,7 @@ CamDaemonSB_FILES := \
 	src/HttpServer.m \
 	src/Logger.m
 
-CamDaemonSB_CFLAGS := -fobjc-arc -std=c11 -Wall -Wno-deprecated-declarations -mios-version-min=16.3
+CamDaemonSB_CFLAGS := -fobjc-arc -std=c11 -Wall -Wno-deprecated-declarations -Wno-overriding-option -mios-version-min=16.3
 CamDaemonSB_FRAMEWORKS := Foundation AVFoundation CoreGraphics CoreMedia CoreVideo UIKit
 
 include $(THEOS)/makefiles/tweak.mk

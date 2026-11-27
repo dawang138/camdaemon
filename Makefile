@@ -19,7 +19,8 @@ CamDaemonSB_FILES := \
 	src/Config.m \
 	src/FrameStore.m \
 	src/CameraCapture.m \
-	src/HttpServer.m
+	src/HttpServer.m \
+	src/Logger.m
 
 CamDaemonSB_CFLAGS := -fobjc-arc -std=c11 -Wall -Wno-deprecated-declarations
 CamDaemonSB_FRAMEWORKS := Foundation AVFoundation CoreGraphics CoreMedia CoreVideo UIKit

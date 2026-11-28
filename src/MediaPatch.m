@@ -2,64 +2,60 @@
 #import <objc/runtime.h>
 #import <unistd.h>
 
-// 路线 B 诊断 hook v3：
-//  1) 注入 mediaserverd（Filter.Executables=mediaserverd）；
-//  2) 吞掉 FigCaptureClientSessionMonitor -updateApplicationState，阻断“后台状态变化→吊销会话”；
-//  3) 记录 -applicationState 的真实返回值（暂不改返回），用于判明前台/后台状态码。
-
-static IMP orig_updateApplicationState = NULL;
-static IMP orig_applicationState = NULL;
+// 路线 B 探针 v4：纯 dump，下钻与吊销链路相关的 FigCapture 关联类，
+// 定位真正发 interruption 的入口。写 /tmp/mediapatch.log。
 
 static FILE *mpLog(void) { return fopen("/tmp/mediapatch.log", "a"); }
 
-static void Hooked_updateApplicationState(id self, SEL _cmd) {
+static void DumpClassDetail(NSString *name) {
     FILE *f = mpLog();
-    if (f) { fprintf(f, "[hook] updateApplicationState swallowed\n"); fclose(f); }
-    // 诊断版：不调用原实现，阻断后台状态更新导致的会话吊销。
-}
+    if (!f) return;
+    Class cls = objc_getClass([name UTF8String]);
+    fprintf(f, "\n=== class %s : %s ===\n", [name UTF8String], cls ? "FOUND" : "NOT FOUND");
+    if (!cls) { fclose(f); return; }
 
-static int Hooked_applicationState(id self, SEL _cmd) {
-    int v = 0;
-    if (orig_applicationState)
-        v = ((int (*)(id, SEL))orig_applicationState)(self, _cmd);
-    static int logged = 0;
-    if (!logged) {
-        FILE *f = mpLog();
-        if (f) { fprintf(f, "[hook] applicationState getter -> %d\n", v); fclose(f); }
-        logged = 1;
+    Class sup = class_getSuperclass(cls);
+    fprintf(f, "  superclass = %s\n", sup ? class_getName(sup) : "(none)");
+
+    unsigned int pc = 0;
+    Protocol *__unsafe_unretained *ps = class_copyProtocolList(cls, &pc);
+    for (unsigned int i = 0; i < pc; i++)
+        fprintf(f, "  protocol = %s\n", protocol_getName(ps[i]));
+    free(ps);
+
+    unsigned int ic = 0;
+    Ivar *iv = class_copyIvarList(cls, &ic);
+    fprintf(f, "  ivars (%u):\n", ic);
+    for (unsigned int i = 0; i < ic; i++)
+        fprintf(f, "    %s : %s\n", ivar_getName(iv[i]), ivar_getTypeEncoding(iv[i]));
+    free(iv);
+
+    unsigned int mc = 0;
+    Method *ms = class_copyMethodList(cls, &mc);
+    for (unsigned int i = 0; i < mc; i++) {
+        SEL sel = method_getName(ms[i]);
+        const char *types = method_getTypeEncoding(ms[i]);
+        fprintf(f, "  method -[%s %s] types=%s\n", class_getName(cls),
+                sel_getName(sel), types ? types : "?");
     }
-    return v; // 诊断版：先保持原值，观察状态码。
+    free(ms);
+    fclose(f);
 }
 
 __attribute__((constructor))
 static void MediaPatchInit(void) {
     FILE *f = mpLog();
-    if (f) fprintf(f, "\n[mediapatch] hook install pid=%d\n", getpid());
-
-    Class cls = objc_getClass("FigCaptureClientSessionMonitor");
-    if (!cls) {
-        if (f) fprintf(f, "[mediapatch] class NOT FOUND\n");
-        if (f) fclose(f);
-        return;
-    }
-
-    Method m1 = class_getInstanceMethod(cls, @selector(updateApplicationState));
-    if (m1) {
-        orig_updateApplicationState = method_getImplementation(m1);
-        method_setImplementation(m1, (IMP)Hooked_updateApplicationState);
-        if (f) fprintf(f, "[mediapatch] hooked updateApplicationState\n");
-    } else if (f) {
-        fprintf(f, "[mediapatch] selector updateApplicationState NOT FOUND\n");
-    }
-
-    Method m2 = class_getInstanceMethod(cls, @selector(applicationState));
-    if (m2) {
-        orig_applicationState = method_getImplementation(m2);
-        method_setImplementation(m2, (IMP)Hooked_applicationState);
-        if (f) fprintf(f, "[mediapatch] hooked applicationState\n");
-    } else if (f) {
-        fprintf(f, "[mediapatch] selector applicationState NOT FOUND\n");
-    }
-
+    if (f) fprintf(f, "\n[mediapatch] v4 dump pid=%d\n", getpid());
     if (f) fclose(f);
+
+    const char *classes[] = {
+        "FigCaptureClientSessionMonitor",
+        "FigCaptureClientSessionMonitorClient",
+        "FigCaptureCMSessionMonitor",
+        "FigCaptureSessionObservatory",
+        "FigCaptureCMSession",
+        "BWFigCaptureSession",
+    };
+    for (int i = 0; i < 6; i++)
+        DumpClassDetail([NSString stringWithUTF8String:classes[i]]);
 }

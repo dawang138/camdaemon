@@ -47,4 +47,8 @@ static NSTimeInterval MonoNow(void) {
     return c;
 }
 
+- (void)clear {
+    dispatch_sync(_queue, ^{ _chunk = nil; });
+}
+
 @end

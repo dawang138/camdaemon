@@ -199,7 +199,7 @@ static NSTimeInterval MonoNow(void) {
 
     _output = [[AVCaptureVideoDataOutput alloc] init];
     _output.alwaysDiscardsLateVideoFrames = YES;
-    _output.videoSettings = @{(id)kCVPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
+    _output.videoSettings = @{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
 
     if (!_delegateQueue) _delegateQueue = dispatch_queue_create("com.local.camdaemon.capture", DISPATCH_QUEUE_SERIAL);
     [_output setSampleBufferDelegate:self queue:_delegateQueue];
@@ -289,7 +289,7 @@ static NSTimeInterval MonoNow(void) {
     if (!_audioStore) return;
     CMFormatDescriptionRef fmt = CMSampleBufferGetFormatDescription(sb);
     if (!fmt) return;
-    const AudioStreamBasicDescription *asbd = CMFormatDescriptionGetAudioStreamBasicDescription(fmt);
+    const AudioStreamBasicDescription *asbd = CMAudioFormatDescriptionGetStreamBasicDescription((CMAudioFormatDescriptionRef)fmt);
     if (!asbd) return;
 
     CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);

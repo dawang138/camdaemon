@@ -21,13 +21,13 @@ static void DumpClassDetail(NSString *name) {
     fprintf(f, "  superclass = %s\n", sup ? class_getName(sup) : "(none)");
 
     unsigned int pc = 0;
-    Protocol **ps = class_copyProtocolList(cls, &pc);
+    Protocol *__unsafe_unretained *ps = class_copyProtocolList(cls, &pc);
     for (unsigned int i = 0; i < pc; i++)
         fprintf(f, "  protocol = %s\n", protocol_getName(ps[i]));
     free(ps);
 
     unsigned int ic = 0;
-    Ivar *iv = class_copyIvarList(cls, &ic);
+    Ivar *__unsafe_unretained iv = class_copyIvarList(cls, &ic);
     fprintf(f, "  ivars (%u):\n", ic);
     for (unsigned int i = 0; i < ic; i++)
         fprintf(f, "    %s : %s\n", ivar_getName(iv[i]), ivar_getTypeEncoding(iv[i]));
@@ -49,7 +49,7 @@ static void ScanClasses(void) {
     FILE *f = logOpen();
     if (!f) return;
     int n = objc_getClassList(NULL, 0);
-    Class *buf = calloc((size_t)n, sizeof(Class));
+    Class *buf = (Class *)calloc((size_t)n, sizeof(Class));
     objc_getClassList(buf, n);
     fprintf(f, "\n=== global class scan (n=%d) ===\n", n);
     const char *keys[] = {"Capture", "Monitor", "Interruption", "ApplicationState", "ClientSession", "FigCapture"};

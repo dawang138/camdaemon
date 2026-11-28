@@ -1,6 +1,7 @@
 #import "HttpServer.h"
 #import "Config.h"
 #import "FrameStore.h"
+#import "AudioStore.h"
 
 #import <sys/socket.h>
 #import <netinet/in.h>
@@ -14,15 +15,16 @@ static NSString *const kBoundary = @"camdaemonframe";
 @interface HttpServer ()
 @property (nonatomic, strong) Config *config;
 @property (nonatomic, strong) FrameStore *store;
+@property (nonatomic, strong) AudioStore *audioStore;
 @property (nonatomic, assign) int listenFd;
 @property (nonatomic, assign) BOOL running;
 @end
 
 @implementation HttpServer
 
-- (instancetype)initWithConfig:(Config *)config store:(FrameStore *)store {
+- (instancetype)initWithConfig:(Config *)config store:(FrameStore *)store audioStore:(AudioStore *)audioStore {
     self = [super init];
-    if (self) { _config = config; _store = store; _listenFd = -1; }
+    if (self) { _config = config; _store = store; _audioStore = audioStore; _listenFd = -1; }
     return self;
 }
 
@@ -97,6 +99,7 @@ static NSString *const kBoundary = @"camdaemonframe";
     else if ([p isEqualToString:@"/capabilities.json"]) [self writeCapabilities:cfd];
     else if ([p isEqualToString:@"/snapshot.jpg"]) [self writeSnapshot:cfd];
     else if ([p isEqualToString:@"/stream"])        [self writeMjpeg:cfd];
+    else if ([p isEqualToString:@"/audio"])         [self writeAudio:cfd];
     else                                            [self sendStatus:404 reason:@"Not Found" contentType:@"text/plain" body:[@"not found" dataUsingEncoding:NSUTF8StringEncoding] fd:cfd];
 
     close(cfd);
@@ -125,6 +128,10 @@ static NSString *const kBoundary = @"camdaemonframe";
 - (void)writeHealth:(int)fd {
     Frame *f = [_store latestFrame];
     BOOL running = _runningCheck ? _runningCheck() : NO;
+    NSTimeInterval age = _frameAgeCheck ? _frameAgeCheck() : HUGE_VAL;
+    BOOL stale = (age > _config.staleThreshold);
+
+    PcmChunk *chunk = [_audioStore latestPcm];
     NSDictionary *json = @{
         @"status": running ? @"running" : @"stopped",
         @"server": @{ @"port": @(_config.listenPort), @"state": _running ? @"listening" : @"stopped" },
@@ -133,7 +140,16 @@ static NSString *const kBoundary = @"camdaemonframe";
             @"cameraAvailable": @YES,
             @"width": @(f.width),
             @"height": @(f.height),
-            @"lastFrameAt": [self isoDate:f.capturedAt] ?: [NSNull null]
+            @"lastFrameAt": [self isoDate:f.capturedAt] ?: [NSNull null],
+            @"frameAgeSeconds": @(isfinite(age) ? round(age * 10) / 10 : -1),
+            @"stale": @(stale)
+        },
+        @"audio": @{
+            @"on": @(_config.audioOn),
+            @"hasChunk": @(chunk != nil),
+            @"sampleRate": @(chunk.sampleRate),
+            @"channels": @(chunk.channels),
+            @"bits": @(chunk.bits)
         },
         @"streams": @{
             @"mjpeg": @{ @"activeClients": @0, @"state": _running ? @"idle" : @"stopped" },
@@ -148,7 +164,8 @@ static NSString *const kBoundary = @"camdaemonframe";
 - (void)writeCapabilities:(int)fd {
     NSDictionary *json = @{
         @"mjpeg": @YES, @"rtsp": @NO, @"snapshot": @YES,
-        @"audio": @NO, @"torch": @NO, @"zoom": @NO, @"focus": @NO,
+        @"audio": @(_config.audioOn), @"audioCodec": @"pcm-s16-mono",
+        @"torch": @NO, @"zoom": @NO, @"focus": @NO,
         @"streamQualities": @[@"low", @"medium", @"high"],
         @"snapshotQualities": @[@"standard", @"high"]
     };
@@ -185,9 +202,48 @@ static NSString *const kBoundary = @"camdaemonframe";
             ssize_t s1 = send(fd, partData.bytes, partData.length, 0);
             ssize_t s2 = send(fd, f.jpeg.bytes, f.jpeg.length, 0);
             ssize_t s3 = send(fd, "\r\n", 2, 0);
-            if (s1 <= 0 || s2 <= 0 || s3 <= 0) break;  // 客户端已断开
+            if (s1 <= 0 || s2 <= 0 || s3 <= 0) break;
         }
         usleep(66000);  // 约 15 fps
+    }
+}
+
+// /audio：自定义二进制分块流。帧格式（小端）：
+// magic[4]='CP1\0' | seq u32 | sampleRate i32 | bits u16 | channels u16 | length u32 | PCM bytes
+- (void)writeAudio:(int)fd {
+    NSString *head = @"HTTP/1.1 200 OK\r\n"
+        @"Content-Type: application/octet-stream\r\n"
+        @"Access-Control-Allow-Origin: *\r\n"
+        @"Cache-Control: no-cache\r\n"
+        @"X-Audio-Codec: pcm-s16-mono\r\n"
+        @"Connection: close\r\n\r\n";
+    NSData *headData = [head dataUsingEncoding:NSUTF8StringEncoding];
+    send(fd, headData.bytes, headData.length, 0);
+
+    NSUInteger lastSeq = 0;
+    while (_running) {
+        PcmChunk *chunk = [_audioStore latestPcm];
+        if (chunk && chunk.seq != lastSeq && chunk.data.length > 0) {
+            lastSeq = chunk.seq;
+            NSMutableData *frame = [NSMutableData data];
+            char magic[4] = {'C','P','1',0};
+            [frame appendBytes:magic length:4];
+            uint32_t seq = (uint32_t)chunk.seq;
+            int32_t rate = (int32_t)chunk.sampleRate;
+            uint16_t bits = (uint16_t)chunk.bits;
+            uint16_t ch = (uint16_t)chunk.channels;
+            uint32_t len = (uint32_t)chunk.data.length;
+            [frame appendBytes:&seq length:4];
+            [frame appendBytes:&rate length:4];
+            [frame appendBytes:&bits length:2];
+            [frame appendBytes:&ch length:2];
+            [frame appendBytes:&len length:4];
+            [frame appendData:chunk.data];
+
+            ssize_t s = send(fd, frame.bytes, frame.length, 0);
+            if (s <= 0) break;
+        }
+        usleep(20000);
     }
 }
 

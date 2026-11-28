@@ -12,8 +12,11 @@
 @property (nonatomic, strong) FrameStore *store;
 @property (nonatomic, strong) AVCaptureSession *session;
 @property (nonatomic, strong) dispatch_queue_t delegateQueue;
+@property (nonatomic, strong) dispatch_source_t retryTimer;
 @property (nonatomic, assign) BOOL running;
-@property (nonatomic, assign) BOOL firstFrameLogged;
+@property (nonatomic, assign) BOOL gotFrame;
+@property (nonatomic, assign) BOOL sessionBuilt;
+@property (nonatomic, assign) NSUInteger retryCount;
 @end
 
 @implementation CameraCapture
@@ -50,10 +53,37 @@
 }
 
 - (void)sessionInterruptionEnded:(NSNotification *)note {
-    SBDebug(@"[camdaemon] 会话通知: InterruptionEnded");
+    SBDebug(@"[camdaemon] 会话通知: InterruptionEnded，重新 startRunning");
+    [self tryStartRunning];
 }
 
 - (BOOL)isRunning { return _running; }
+
+// 会话只建一次；startRunning 可重复调用。被中断/后台吊销后由中断结束回调或定时兜底重试。
+- (void)tryStartRunning {
+    if (!_session) return;
+    if (_session.isRunning) { _running = YES; return; }
+    _retryCount++;
+    SBDebug(@"[camdaemon] tryStartRunning 第 %lu 次", (unsigned long)_retryCount);
+    [_session startRunning];
+    SBDebug(@"[camdaemon] startRunning 后 isRunning=%d", _session.isRunning);
+    _running = YES;
+}
+
+// 定时兜底：未出帧且会话未跑起来时，周期性重试 startRunning。
+- (void)startRetryTimer {
+    if (_retryTimer) return;
+    _retryTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _delegateQueue);
+    dispatch_source_set_timer(_retryTimer, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC),
+                              5 * NSEC_PER_SEC, 1 * NSEC_PER_SEC);
+    __weak typeof(self) wself = self;
+    dispatch_source_set_event_handler(_retryTimer, ^{
+        __strong typeof(wself) sself = wself;
+        if (!sself || sself.gotFrame) return;
+        if (!sself.session.isRunning) [sself tryStartRunning];
+    });
+    dispatch_resume(_retryTimer);
+}
 
 - (BOOL)start:(NSError **)error {
     // 摄像头权限：daemon 无 GUI，首次授权需在带界面的 App 或系统设置里完成。
@@ -108,13 +138,17 @@
     SBDebug(@"[camdaemon] session inputs=%lu outputs=%lu",
           (unsigned long)_session.inputs.count, (unsigned long)_session.outputs.count);
 
-    [_session startRunning];
-    SBDebug(@"[camdaemon] startRunning 后 isRunning=%d", _session.isRunning);
+    _sessionBuilt = YES;
+    // constructor 在 SB 启动早期执行，此时界面/前台状态未就绪；延迟到前台就绪后再 startRunning。
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)),
+                   _delegateQueue, ^{ [self tryStartRunning]; });
+    [self startRetryTimer];
     _running = YES;
     return YES;
 }
 
 - (void)stop {
+    if (_retryTimer) { dispatch_source_cancel(_retryTimer); _retryTimer = nil; }
     if (_session) [_session stopRunning];
     _running = NO;
 }
@@ -128,8 +162,8 @@
     CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
     if (!pixelBuffer) return;
 
-    if (!_firstFrameLogged) {
-        _firstFrameLogged = YES;
+    if (!_gotFrame) {
+        _gotFrame = YES;
         SBDebug(@"[camdaemon] 首帧到达: %zux%zu",
               CVPixelBufferGetWidth(pixelBuffer), CVPixelBufferGetHeight(pixelBuffer));
     }

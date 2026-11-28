@@ -94,8 +94,12 @@ static NSString *const kBoundary = @"camdaemonframe";
     }
 
     NSString *p = [NSString stringWithUTF8String:path];
+    NSString *m = [NSString stringWithUTF8String:method];
 
-    if ([p isEqualToString:@"/health.json"])       [self writeHealth:cfd];
+    if ([m isEqualToString:@"POST"] && [p isEqualToString:@"/config"]) {
+        [self writeConfig:cfd bodyBuffer:buf length:n];
+    }
+    else if ([p isEqualToString:@"/health.json"])       [self writeHealth:cfd];
     else if ([p isEqualToString:@"/capabilities.json"]) [self writeCapabilities:cfd];
     else if ([p isEqualToString:@"/snapshot.jpg"]) [self writeSnapshot:cfd];
     else if ([p isEqualToString:@"/stream"])        [self writeMjpeg:cfd];
@@ -171,6 +175,29 @@ static NSString *const kBoundary = @"camdaemonframe";
     };
     NSData *body = [NSJSONSerialization dataWithJSONObject:json options:0 error:nil];
     [self sendStatus:200 reason:@"OK" contentType:@"application/json" body:body fd:fd];
+}
+
+// POST /config：body JSON {"audioOn": true|false}，运行时切换麦克风采集。
+- (void)writeConfig:(int)fd bodyBuffer:(const char *)buf length:(ssize_t)n {
+    NSDictionary *json = nil;
+    NSString *req = [[NSString alloc] initWithBytes:buf length:(size_t)n encoding:NSUTF8StringEncoding];
+    if (req) {
+        NSRange r = [req rangeOfString:@"\r\n\r\n"];
+        if (r.location != NSNotFound) {
+            NSData *body = [[req substringFromIndex:r.location + r.length] dataUsingEncoding:NSUTF8StringEncoding];
+            json = [NSJSONSerialization JSONObjectWithData:body options:0 error:nil];
+        }
+    }
+    if (!json || json[@"audioOn"] == nil) {
+        NSData *err = [@"{\"error\":\"missing audioOn\"}" dataUsingEncoding:NSUTF8StringEncoding];
+        [self sendStatus:400 reason:@"Bad Request" contentType:@"application/json" body:err fd:fd];
+        return;
+    }
+    BOOL on = [json[@"audioOn"] boolValue];
+    if (self.audioOnSetter) self.audioOnSetter(on);
+    NSDictionary *resp = @{ @"audioOn": @(on) };
+    NSData *respBody = [NSJSONSerialization dataWithJSONObject:resp options:0 error:nil];
+    [self sendStatus:200 reason:@"OK" contentType:@"application/json" body:respBody fd:fd];
 }
 
 - (void)writeSnapshot:(int)fd {

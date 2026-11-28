@@ -1,4 +1,11 @@
 #import "FrameStore.h"
+#import <time.h>
+
+static NSTimeInterval MonoNow(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (NSTimeInterval)ts.tv_sec + (NSTimeInterval)ts.tv_nsec / 1.0e9;
+}
 
 @implementation Frame
 @end
@@ -21,6 +28,7 @@
 
 - (void)setFrame:(Frame *)frame {
     dispatch_sync(_queue, ^{
+        frame.monotonic = MonoNow();
         _frame = frame;
     });
 }

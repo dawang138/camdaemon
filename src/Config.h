@@ -29,4 +29,7 @@
 
 + (instancetype)defaultConfig;
 
+/// 持久化麦克风音频开关（写入共享 defaults 套件，启动与运行时都读取）。
++ (void)setAudioOn:(BOOL)on;
+
 @end

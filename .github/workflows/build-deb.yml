@@ -30,7 +30,6 @@ jobs:
         run: |
           make package \
             THEOS_PACKAGE_SCHEME=rootless \
-            ARCHS=arm64 \
             FINALPACKAGE=1
 
       - name: Upload deb artifact

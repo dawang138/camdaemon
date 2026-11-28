@@ -14,4 +14,6 @@
 @interface AudioStore : NSObject
 - (void)setPcmData:(NSData *)data sampleRate:(int)rate channels:(int)ch bits:(int)bits;
 - (PcmChunk *)latestPcm;
+/// 清空最近音频块（关闭麦克风时调用，避免残留旧块被当作在线音频）。
+- (void)clear;
 @end

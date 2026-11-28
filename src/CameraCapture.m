@@ -99,6 +99,14 @@ static NSTimeInterval MonoNow(void) {
 
 - (BOOL)isStale { return [self frameAge] > _config.staleThreshold; }
 
+- (void)setAudioOn:(BOOL)on {
+    [Config setAudioOn:on];
+    SBDebug(@"[camdaemon] 音频开关切换 -> %d（重建会话挂/卸麦克风）", (int)on);
+    if (!on) [_audioStore clear];
+    if (!_delegateQueue) { [self rebuildSession]; return; }
+    dispatch_async(_delegateQueue, ^{ [self rebuildSession]; });
+}
+
 - (void)tryStartRunning {
     if (!_session) return;
     if (_session.isRunning) { _running = YES; return; }

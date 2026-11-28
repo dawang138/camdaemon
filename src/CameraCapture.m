@@ -76,9 +76,9 @@
     _retryTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _delegateQueue);
     dispatch_source_set_timer(_retryTimer, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC),
                               5 * NSEC_PER_SEC, 1 * NSEC_PER_SEC);
-    __weak typeof(self) wself = self;
+    __weak __typeof__(self) wself = self;
     dispatch_source_set_event_handler(_retryTimer, ^{
-        __strong typeof(wself) sself = wself;
+        __strong __typeof__(wself) sself = wself;
         if (!sself || sself.gotFrame) return;
         if (!sself.session.isRunning) [sself tryStartRunning];
     });

@@ -9,7 +9,7 @@ static void DumpClass(NSString *name) {
     FILE *f = fopen("/tmp/mediapatch.log", "a");
     if (!f) return;
     Class cls = objc_getClass([name UTF8String]);
-    fprintf(f, "\n=== class %@ : %s ===\n", name, cls ? "FOUND" : "NOT FOUND");
+    fprintf(f, "\n=== class %s : %s ===\n", [name UTF8String], cls ? "FOUND" : "NOT FOUND");
     if (cls) {
         unsigned int mcount = 0;
         Method *ms = class_copyMethodList(cls, &mcount);

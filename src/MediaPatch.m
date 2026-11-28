@@ -10,10 +10,10 @@
 static IMP orig_updateApplicationState = NULL;
 static IMP orig_applicationState = NULL;
 
-static FILE *logf(void) { return fopen("/tmp/mediapatch.log", "a"); }
+static FILE *mpLog(void) { return fopen("/tmp/mediapatch.log", "a"); }
 
 static void Hooked_updateApplicationState(id self, SEL _cmd) {
-    FILE *f = logf();
+    FILE *f = mpLog();
     if (f) { fprintf(f, "[hook] updateApplicationState swallowed\n"); fclose(f); }
     // 诊断版：不调用原实现，阻断后台状态更新导致的会话吊销。
 }
@@ -24,7 +24,7 @@ static int Hooked_applicationState(id self, SEL _cmd) {
         v = ((int (*)(id, SEL))orig_applicationState)(self, _cmd);
     static int logged = 0;
     if (!logged) {
-        FILE *f = logf();
+        FILE *f = mpLog();
         if (f) { fprintf(f, "[hook] applicationState getter -> %d\n", v); fclose(f); }
         logged = 1;
     }
@@ -33,7 +33,7 @@ static int Hooked_applicationState(id self, SEL _cmd) {
 
 __attribute__((constructor))
 static void MediaPatchInit(void) {
-    FILE *f = logf();
+    FILE *f = mpLog();
     if (f) fprintf(f, "\n[mediapatch] hook install pid=%d\n", getpid());
 
     Class cls = objc_getClass("FigCaptureClientSessionMonitor");

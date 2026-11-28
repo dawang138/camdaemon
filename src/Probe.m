@@ -49,7 +49,7 @@ static void ProbeInit(void) {
     };
     for (int i = 0; i < (int)(sizeof(cands) / sizeof(cands[0])); i++) {
         Class c = objc_getClass(cands[i]);
-        plog("getClass(%s) = %p", cands[i], (void *)c);
+        plog("getClass(%s) = %p", cands[i], (__bridge void *)c);
     }
 
     unsigned int count = 0;

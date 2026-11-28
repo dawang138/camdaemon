@@ -10,10 +10,14 @@ static Config       *g_config;
 static FrameStore   *g_store;
 static CameraCapture *g_capture;
 static HttpServer    *g_http;
+static BOOL          g_inited = NO;
 
 // dylib 被 ElleKit 注入 SpringBoard 后由构造函数入口装配，无需 main/RunLoop。
+// 同一进程内 constructor 可能被加载通道重复调用，防重入：第二次直接返回。
 __attribute__((constructor))
 static void CamDaemonSBInit(void) {
+    if (g_inited) return;
+    g_inited = YES;
     @autoreleasepool {
         NSBundle *mainBundle = [NSBundle mainBundle];
         SBDebug(@"[camdaemon] tweak loaded: bundlePath=%@ bundleID=%@",

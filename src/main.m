@@ -47,6 +47,7 @@ static void CamDaemonSBInit(void) {
         g_http = [[HttpServer alloc] initWithConfig:g_config store:g_store audioStore:g_audioStore];
         g_http.runningCheck = ^BOOL { return g_capture.isRunning; };
         g_http.frameAgeCheck = ^NSTimeInterval { return g_capture.frameAge; };
+        g_http.audioOnSetter = ^(BOOL on) { [g_capture setAudioOn:on]; };
 
         NSError *err = nil;
         if (![g_capture start:&err]) {

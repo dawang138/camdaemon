@@ -1,6 +1,6 @@
 Package: com.local.camdaemon
 Name: CamDaemonSB
-Version: 0.3.0
+Version: 0.3.1
 Architecture: iphoneos-arm64
 Description: LAN camera tweak - injects into SpringBoard for background capture + embedded HTTP
 Maintainer: local

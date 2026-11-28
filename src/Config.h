@@ -20,6 +20,12 @@
 @property (nonatomic, assign, readonly) int snapshotMaxWidth;
 /// 是否输出详细日志。
 @property (nonatomic, assign, readonly) BOOL verboseLog;
+/// 是否开启麦克风音频采集（PCM 直传）。
+@property (nonatomic, assign, readonly) BOOL audioOn;
+/// 帧陈旧阈值（单调时钟秒数），超过判为陈旧需重建会话。
+@property (nonatomic, assign, readonly) NSTimeInterval staleThreshold;
+/// 音频输出采样率（Hz）。
+@property (nonatomic, assign, readonly) int audioSampleRate;
 
 + (instancetype)defaultConfig;
 

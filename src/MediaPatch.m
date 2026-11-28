@@ -2,60 +2,42 @@
 #import <objc/runtime.h>
 #import <unistd.h>
 
-// 路线 B 探针 v4：纯 dump，下钻与吊销链路相关的 FigCapture 关联类，
-// 定位真正发 interruption 的入口。写 /tmp/mediapatch.log。
+// 路线 B hook v5：
+// 目标类 FigCaptureClientSessionMonitorClient，其 ivar `_hasBackgroundCameraAccess`(BOOL)
+// 是“该 client 是否获准后台采集”的判定位。hook getter 恒返回 YES，
+// 让 mediaserverd 不再因后台身份吊销摄像头会话。
 
 static FILE *mpLog(void) { return fopen("/tmp/mediapatch.log", "a"); }
 
-static void DumpClassDetail(NSString *name) {
-    FILE *f = mpLog();
-    if (!f) return;
-    Class cls = objc_getClass([name UTF8String]);
-    fprintf(f, "\n=== class %s : %s ===\n", [name UTF8String], cls ? "FOUND" : "NOT FOUND");
-    if (!cls) { fclose(f); return; }
-
-    Class sup = class_getSuperclass(cls);
-    fprintf(f, "  superclass = %s\n", sup ? class_getName(sup) : "(none)");
-
-    unsigned int pc = 0;
-    Protocol *__unsafe_unretained *ps = class_copyProtocolList(cls, &pc);
-    for (unsigned int i = 0; i < pc; i++)
-        fprintf(f, "  protocol = %s\n", protocol_getName(ps[i]));
-    free(ps);
-
-    unsigned int ic = 0;
-    Ivar *iv = class_copyIvarList(cls, &ic);
-    fprintf(f, "  ivars (%u):\n", ic);
-    for (unsigned int i = 0; i < ic; i++)
-        fprintf(f, "    %s : %s\n", ivar_getName(iv[i]), ivar_getTypeEncoding(iv[i]));
-    free(iv);
-
-    unsigned int mc = 0;
-    Method *ms = class_copyMethodList(cls, &mc);
-    for (unsigned int i = 0; i < mc; i++) {
-        SEL sel = method_getName(ms[i]);
-        const char *types = method_getTypeEncoding(ms[i]);
-        fprintf(f, "  method -[%s %s] types=%s\n", class_getName(cls),
-                sel_getName(sel), types ? types : "?");
+static BOOL Hooked_hasBackgroundCameraAccess(id self, SEL _cmd) {
+    static int logged = 0;
+    if (!logged) {
+        FILE *f = mpLog();
+        if (f) { fprintf(f, "[hook] hasBackgroundCameraAccess forced YES\n"); fclose(f); }
+        logged = 1;
     }
-    free(ms);
-    fclose(f);
+    return YES;
 }
 
 __attribute__((constructor))
 static void MediaPatchInit(void) {
     FILE *f = mpLog();
-    if (f) fprintf(f, "\n[mediapatch] v4 dump pid=%d\n", getpid());
-    if (f) fclose(f);
+    if (f) fprintf(f, "\n[mediapatch] v5 hook install pid=%d\n", getpid());
 
-    const char *classes[] = {
-        "FigCaptureClientSessionMonitor",
-        "FigCaptureClientSessionMonitorClient",
-        "FigCaptureCMSessionMonitor",
-        "FigCaptureSessionObservatory",
-        "FigCaptureCMSession",
-        "BWFigCaptureSession",
-    };
-    for (int i = 0; i < 6; i++)
-        DumpClassDetail([NSString stringWithUTF8String:classes[i]]);
+    Class cls = objc_getClass("FigCaptureClientSessionMonitorClient");
+    if (!cls) {
+        if (f) fprintf(f, "[mediapatch] client class NOT FOUND\n");
+        if (f) fclose(f);
+        return;
+    }
+
+    Method m = class_getInstanceMethod(cls, @selector(hasBackgroundCameraAccess));
+    if (m) {
+        method_setImplementation(m, (IMP)Hooked_hasBackgroundCameraAccess);
+        if (f) fprintf(f, "[mediapatch] hooked hasBackgroundCameraAccess\n");
+    } else if (f) {
+        fprintf(f, "[mediapatch] selector hasBackgroundCameraAccess NOT FOUND\n");
+    }
+
+    if (f) fclose(f);
 }

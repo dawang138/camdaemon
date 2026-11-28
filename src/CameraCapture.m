@@ -11,6 +11,8 @@
 @property (nonatomic, strong) Config *config;
 @property (nonatomic, strong) FrameStore *store;
 @property (nonatomic, strong) AVCaptureSession *session;
+@property (nonatomic, strong) AVCaptureDeviceInput *input;
+@property (nonatomic, strong) AVCaptureVideoDataOutput *output;
 @property (nonatomic, strong) dispatch_queue_t delegateQueue;
 @property (nonatomic, strong) dispatch_source_t retryTimer;
 @property (nonatomic, assign) BOOL running;
@@ -46,6 +48,9 @@
 - (void)sessionRuntimeError:(NSNotification *)note {
     NSError *err = note.userInfo[AVCaptureSessionErrorKey];
     SBDebug(@"[camdaemon] 会话通知: RuntimeError %@", err ? err.localizedDescription : @"(nil)");
+    _gotFrame = NO; // 允许兜底重试 / 重建
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)),
+                   _delegateQueue, ^{ [self rebuildSession]; });
 }
 
 - (void)sessionInterrupted:(NSNotification *)note {
@@ -67,10 +72,17 @@
     SBDebug(@"[camdaemon] tryStartRunning 第 %lu 次", (unsigned long)_retryCount);
     [_session startRunning];
     SBDebug(@"[camdaemon] startRunning 后 isRunning=%d", _session.isRunning);
-    _running = YES;
+    _running = _session.isRunning;
 }
 
-// 定时兜底：未出帧且会话未跑起来时，周期性重试 startRunning。
+// 会话底层连接断裂（如 mediaserverd 重启）后，释放旧会话并重新构建再启动。
+- (void)rebuildSession {
+    SBDebug(@"[camdaemon] 重建采集会话");
+    [self buildSession];
+    [self tryStartRunning];
+}
+
+// 定时兜底：会话未跑起来则重试；在跑但帧陈旧（>8s 无新帧）则重建会话。
 - (void)startRetryTimer {
     if (_retryTimer) return;
     _retryTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _delegateQueue);
@@ -79,8 +91,19 @@
     __weak __typeof__(self) wself = self;
     dispatch_source_set_event_handler(_retryTimer, ^{
         __strong __typeof__(wself) sself = wself;
-        if (!sself || sself.gotFrame) return;
-        if (!sself.session.isRunning) [sself tryStartRunning];
+        if (!sself || !sself.session) return;
+        if (!sself.session.isRunning) {
+            [sself tryStartRunning];
+            return;
+        }
+        Frame *f = sself.store.latestFrame;
+        if (f && f.capturedAt) {
+            NSTimeInterval age = [[NSDate date] timeIntervalSinceDate:f.capturedAt];
+            if (age > 8) {
+                SBDebug(@"[camdaemon] 帧陈旧 %.1fs，重建会话", age);
+                [sself rebuildSession];
+            }
+        }
     });
     dispatch_resume(_retryTimer);
 }
@@ -103,43 +126,12 @@
         return NO;
     }
 
-    _session = [[AVCaptureSession alloc] init];
-    _session.sessionPreset = _config.sessionPreset;
-
-    AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
-    if (!device) {
+    if (![self buildSession]) {
         if (error) *error = [NSError errorWithDomain:@"CamDaemon" code:2
             userInfo:@{NSLocalizedDescriptionKey: @"未找到后置摄像头设备"}];
         return NO;
     }
-    SBDebug(@"[camdaemon] device: position=%ld uniqueID=%@ name=%@ activeFormat=%@",
-          (long)device.position, device.uniqueID, device.localizedName,
-          device.activeFormat.formatDescription != nil ? @"yes" : @"no");
-
-    NSError *inputErr = nil;
-    AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&inputErr];
-    if (!input) {
-        if (error) *error = inputErr;
-        return NO;
-    }
-
-    AVCaptureVideoDataOutput *output = [[AVCaptureVideoDataOutput alloc] init];
-    output.alwaysDiscardsLateVideoFrames = YES;
-    output.videoSettings = @{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
-
-    _delegateQueue = dispatch_queue_create("com.local.camdaemon.capture", DISPATCH_QUEUE_SERIAL);
-    [output setSampleBufferDelegate:self queue:_delegateQueue];
-
-    BOOL canIn = [_session canAddInput:input];
-    BOOL canOut = [_session canAddOutput:output];
-    SBDebug(@"[camdaemon] canAddInput=%d canAddOutput=%d", canIn, canOut);
-    if (canIn) [_session addInput:input];
-    if (canOut) [_session addOutput:output];
-    SBDebug(@"[camdaemon] session inputs=%lu outputs=%lu",
-          (unsigned long)_session.inputs.count, (unsigned long)_session.outputs.count);
-
-    _sessionBuilt = YES;
-    // constructor 在 SB 启动早期执行，此时界面/前台状态未就绪；延迟到前台就绪后再 startRunning。
+    // constructor 在 SB 启动早期执行，此时界面/前台状态未就绪；延迟到就绪后再 startRunning。
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)),
                    _delegateQueue, ^{ [self tryStartRunning]; });
     [self startRetryTimer];
@@ -147,9 +139,49 @@
     return YES;
 }
 
+// 构建（或重建）采集会话：释放旧 session/input/output 后重新挂载设备与输出。
+- (BOOL)buildSession {
+    if (_session) { [_session stopRunning]; _session = nil; }
+    _input = nil;
+    _output = nil;
+
+    _session = [[AVCaptureSession alloc] init];
+    _session.sessionPreset = _config.sessionPreset;
+
+    AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+    if (!device) return NO;
+    SBDebug(@"[camdaemon] device: position=%ld uniqueID=%@ name=%@ activeFormat=%@",
+          (long)device.position, device.uniqueID, device.localizedName,
+          device.activeFormat.formatDescription != nil ? @"yes" : @"no");
+
+    _input = [AVCaptureDeviceInput deviceInputWithDevice:device error:NULL];
+    if (!_input) return NO;
+
+    _output = [[AVCaptureVideoDataOutput alloc] init];
+    _output.alwaysDiscardsLateVideoFrames = YES;
+    _output.videoSettings = @{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
+
+    if (!_delegateQueue) _delegateQueue = dispatch_queue_create("com.local.camdaemon.capture", DISPATCH_QUEUE_SERIAL);
+    [_output setSampleBufferDelegate:self queue:_delegateQueue];
+
+    BOOL canIn = [_session canAddInput:_input];
+    BOOL canOut = [_session canAddOutput:_output];
+    SBDebug(@"[camdaemon] canAddInput=%d canAddOutput=%d", canIn, canOut);
+    if (canIn) [_session addInput:_input];
+    if (canOut) [_session addOutput:_output];
+    SBDebug(@"[camdaemon] session inputs=%lu outputs=%lu",
+          (unsigned long)_session.inputs.count, (unsigned long)_session.outputs.count);
+
+    _sessionBuilt = YES;
+    return YES;
+}
+
 - (void)stop {
     if (_retryTimer) { dispatch_source_cancel(_retryTimer); _retryTimer = nil; }
     if (_session) [_session stopRunning];
+    _session = nil;
+    _input = nil;
+    _output = nil;
     _running = NO;
 }
 

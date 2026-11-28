@@ -16,5 +16,7 @@
 @property (nonatomic, copy) BOOL (^runningCheck)(void);
 /// 回读最近一帧的单调时钟龄（秒）；无帧返回巨大值。
 @property (nonatomic, copy) NSTimeInterval (^frameAgeCheck)(void);
+/// 运行时切换麦克风音频开关（由 main 注入到 CameraCapture）。
+@property (nonatomic, copy) void (^audioOnSetter)(BOOL on);
 
 @end

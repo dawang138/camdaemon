@@ -6,12 +6,14 @@
 
 #import "Config.h"
 #import "FrameStore.h"
+#import "AudioStore.h"
 #import "CameraCapture.h"
 #import "HttpServer.h"
 #import "Logger.h"
 
 static Config       *g_config;
 static FrameStore   *g_store;
+static AudioStore   *g_audioStore;
 static CameraCapture *g_capture;
 static HttpServer    *g_http;
 static BOOL          g_inited = NO;
@@ -40,9 +42,11 @@ static void CamDaemonSBInit(void) {
 
         g_config = [Config defaultConfig];
         g_store = [[FrameStore alloc] init];
-        g_capture = [[CameraCapture alloc] initWithConfig:g_config store:g_store];
-        g_http = [[HttpServer alloc] initWithConfig:g_config store:g_store];
+        g_audioStore = [[AudioStore alloc] init];
+        g_capture = [[CameraCapture alloc] initWithConfig:g_config store:g_store audioStore:g_audioStore];
+        g_http = [[HttpServer alloc] initWithConfig:g_config store:g_store audioStore:g_audioStore];
         g_http.runningCheck = ^BOOL { return g_capture.isRunning; };
+        g_http.frameAgeCheck = ^NSTimeInterval { return g_capture.frameAge; };
 
         NSError *err = nil;
         if (![g_capture start:&err]) {

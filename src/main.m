@@ -1,4 +1,8 @@
 #import <Foundation/Foundation.h>
+#import <mach-o/dyld.h>
+#import <dlfcn.h>
+#import <unistd.h>
+#import <string.h>
 
 #import "Config.h"
 #import "FrameStore.h"
@@ -16,6 +20,17 @@ static BOOL          g_inited = NO;
 // 同一进程内 constructor 可能被加载通道重复调用，防重入：第二次直接返回。
 __attribute__((constructor))
 static void CamDaemonSBInit(void) {
+    Dl_info info;
+    dladdr((const void *)&CamDaemonSBInit, &info);
+    const char *selfImage = NULL;
+    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
+        const char *n = _dyld_get_image_name(i);
+        if (n && strstr(n, "CamDaemonSB")) { selfImage = n; break; }
+    }
+    SBDebug(@"[camdaemon] constructor pid=%d selfImage=%s initAddr=%p dli_fname=%s g_initedAddr=%p g_inited=%d",
+            getpid(), selfImage ? selfImage : "?", (void *)&CamDaemonSBInit,
+            info.dli_fname ? info.dli_fname : "?", (void *)&g_inited, (int)g_inited);
+
     if (g_inited) return;
     g_inited = YES;
     @autoreleasepool {

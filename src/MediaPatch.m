@@ -27,7 +27,7 @@ static void DumpClassDetail(NSString *name) {
     free(ps);
 
     unsigned int ic = 0;
-    Ivar *__unsafe_unretained iv = class_copyIvarList(cls, &ic);
+    Ivar *iv = class_copyIvarList(cls, &ic);
     fprintf(f, "  ivars (%u):\n", ic);
     for (unsigned int i = 0; i < ic; i++)
         fprintf(f, "    %s : %s\n", ivar_getName(iv[i]), ivar_getTypeEncoding(iv[i]));

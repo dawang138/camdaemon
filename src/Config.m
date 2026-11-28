@@ -53,4 +53,8 @@ static BOOL envBool(NSString *key, BOOL fallback) {
 - (NSTimeInterval)staleThreshold { return envFloat(@"CAM_STALE_SECS", 8.0); }
 - (int)audioSampleRate { return envInt(@"CAM_AUDIO_RATE", 16000); }
 
++ (void)setAudioOn:(BOOL)on {
+    [suiteDefaults() setBool:on forKey:@"audioOn"];
+}
+
 @end

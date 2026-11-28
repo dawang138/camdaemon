@@ -1,5 +1,12 @@
 #import "Config.h"
 
+static NSUserDefaults *suiteDefaults(void) {
+    static NSUserDefaults *ud;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ ud = [[NSUserDefaults alloc] initWithSuiteName:@"com.local.camdaemon"]; });
+    return ud;
+}
+
 static int envInt(NSString *key, int fallback) {
     NSString *v = NSProcessInfo.processInfo.environment[key];
     if (v.length == 0) return fallback;
@@ -38,5 +45,12 @@ static BOOL envBool(NSString *key, BOOL fallback) {
 - (int)streamMaxWidth { return envInt(@"CAM_STREAM_W", 960); }
 - (int)snapshotMaxWidth { return envInt(@"CAM_SNAP_W", 1920); }
 - (BOOL)verboseLog { return envBool(@"CAM_VERBOSE", YES); }
+- (BOOL)audioOn {
+    NSUserDefaults *ud = suiteDefaults();
+    if ([ud objectForKey:@"audioOn"] != nil) return [ud boolForKey:@"audioOn"];
+    return envBool(@"CAM_AUDIO_ON", YES);
+}
+- (NSTimeInterval)staleThreshold { return envFloat(@"CAM_STALE_SECS", 8.0); }
+- (int)audioSampleRate { return envInt(@"CAM_AUDIO_RATE", 16000); }
 
 @end

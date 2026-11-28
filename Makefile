@@ -23,12 +23,13 @@ CamDaemonSB_FILES := \
 	src/main.m \
 	src/Config.m \
 	src/FrameStore.m \
+	src/AudioStore.m \
 	src/CameraCapture.m \
 	src/HttpServer.m \
 	src/Logger.m
 
 CamDaemonSB_CFLAGS := -fobjc-arc -std=c11 -Wall -Wno-deprecated-declarations
-CamDaemonSB_FRAMEWORKS := Foundation AVFoundation CoreGraphics CoreMedia CoreVideo UIKit
+CamDaemonSB_FRAMEWORKS := Foundation AVFoundation CoreGraphics CoreMedia CoreVideo UIKit AudioToolbox
 
 # 路线 B：注入 mediaserverd 的补丁 tweak（探针阶段：仅验证注入 + dump 私有类方法签名）。
 MediaPatch_FILES := src/MediaPatch.m

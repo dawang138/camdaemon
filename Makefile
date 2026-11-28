@@ -17,7 +17,7 @@ TARGET_CODESIGN_FLAGS := "-Sentitlements.plist"
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME := CamDaemonSB
+TWEAK_NAME := CamDaemonSB MediaPatch
 
 CamDaemonSB_FILES := \
 	src/main.m \
@@ -29,5 +29,9 @@ CamDaemonSB_FILES := \
 
 CamDaemonSB_CFLAGS := -fobjc-arc -std=c11 -Wall -Wno-deprecated-declarations
 CamDaemonSB_FRAMEWORKS := Foundation AVFoundation CoreGraphics CoreMedia CoreVideo UIKit
+
+# 路线 B：注入 mediaserverd 的补丁 tweak（探针阶段：仅验证注入 + dump 私有类方法签名）。
+MediaPatch_FILES := src/MediaPatch.m
+MediaPatch_CFLAGS := -fobjc-arc -std=c11 -Wall -Wno-deprecated-declarations
 
 include $(THEOS)/makefiles/tweak.mk
